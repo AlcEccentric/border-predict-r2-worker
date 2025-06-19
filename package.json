@@ -1,0 +1,13 @@
+{
+  "name": "cdn-worker",
+  "version": "1.0.0",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "wrangler build",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250619.0",
+    "typescript": "^5.1.6"
+  }
+}

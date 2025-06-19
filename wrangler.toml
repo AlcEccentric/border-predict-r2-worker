@@ -1,0 +1,15 @@
+name = "border-predict-r2-worker"
+main = "src/index.ts"
+compatibility_date = "2025-06-19"
+type = "javascript"
+
+account_id = "a2038a8c35b694cce75e8b237df7f774"
+workers_dev = false
+
+r2_buckets = [
+  { binding = "BUCKET", bucket_name = "mltd-border-predict" }
+]
+
+routes = [
+  { pattern = "cdn.yuenimillion.live/normal/*", zone_name = "yuenimillion.live" }
+]
