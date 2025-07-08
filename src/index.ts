@@ -9,7 +9,9 @@ export default {
 
     if (
       !key.startsWith("normal/metadata/") &&
-      !key.startsWith("normal/prediction/")
+      !key.startsWith("normal/prediction/") &&
+      !key.startsWith("metadata/") &&
+      !key.startsWith("prediction/")
     ) {
       return new Response("Forbidden", { status: 403 });
     }
