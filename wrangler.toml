@@ -11,5 +11,5 @@ r2_buckets = [
 ]
 
 routes = [
-  { pattern = "cdn.yuenimillion.live/normal/*", zone_name = "yuenimillion.live" }
+  { pattern = "cdn.yuenimillion.live/*", zone_name = "yuenimillion.live" }
 ]
