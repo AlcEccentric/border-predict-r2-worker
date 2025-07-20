@@ -5,7 +5,17 @@ export interface Env {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
-    const key = url.pathname.slice(1); // remove leading slash
+    let key = url.pathname.slice(1); // remove leading slash
+    // Remap /data/metadata/* and /data/prediction/* to metadata/* and prediction/* in the bucket
+    if (key.startsWith("data/metadata/")) {
+      key = key.replace("data/metadata/", "metadata/");
+    } else if (key.startsWith("data/prediction/")) {
+      key = key.replace("data/prediction/", "prediction/");
+    } else if (key.startsWith("data/normal/metadata/")) {
+      key = key.replace("data/normal/metadata/", "normal/metadata/");
+    } else if (key.startsWith("data/normal/prediction/")) {
+      key = key.replace("data/normal/prediction/", "normal/prediction/");
+    }
 
     if (
       !key.startsWith("normal/metadata/") &&
