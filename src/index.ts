@@ -46,7 +46,7 @@ export default {
     const cacheControl = isDebug
       ? "no-cache"
       : key.startsWith("normal/prediction/") || key.startsWith("prediction/")
-      ? "public, max-age=1800"
+      ? "public, max-age=3600"
       : "public, max-age=86400";
 
     return new Response(object.body, {
