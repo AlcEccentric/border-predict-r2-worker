@@ -90,7 +90,11 @@ export default {
             return withCors('Forbidden', { status: 403 }, allowOrigin);
         }
 
-        const object = await env.BUCKET.get(key);
+        // For HEAD requests we can avoid streaming the body — `head()`
+        // returns the same metadata without bothering with the object body.
+        const object = request.method === 'HEAD'
+            ? await env.BUCKET.head(key)
+            : await env.BUCKET.get(key);
         if (!object) {
             return withCors('Not Found', { status: 404 }, allowOrigin);
         }
@@ -101,11 +105,18 @@ export default {
                 ? 'public, max-age=3600'
                 : 'public, max-age=86400';
 
-        return withCors(object.body, {
+        // R2 records the upload time on every object. Surface it as
+        // `Last-Modified` so the frontend can do freshness checks via
+        // HEAD probes (e.g. excluding leftover data from prior events).
+        const lastModified = object.uploaded.toUTCString();
+        const body = request.method === 'HEAD' ? null : (object as R2ObjectBody).body;
+
+        return withCors(body, {
             status: 200,
             headers: {
                 'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream',
                 'Cache-Control': cacheControl,
+                'Last-Modified': lastModified,
             },
         }, allowOrigin);
     },
