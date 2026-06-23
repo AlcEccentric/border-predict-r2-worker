@@ -45,6 +45,10 @@ function withCors(
         headers.set('Vary', 'Origin');
     }
     Object.entries(CORS_BASE).forEach(([k, v]) => headers.set(k, v));
+    // Allow callers to read detailed Resource Timing data
+    // (transferSize, decodedBodySize, etc.) from cross-origin responses.
+    // Required for performance measurements; safe for a public CDN.
+    headers.set('Timing-Allow-Origin', '*');
     return new Response(body, { ...init, headers });
 }
 
