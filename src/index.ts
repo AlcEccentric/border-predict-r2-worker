@@ -1,61 +1,108 @@
 export interface Env {
-  BUCKET: R2Bucket;
+    BUCKET: R2Bucket;
+}
+
+// Origins that are allowed to hit the CDN. Anything not on this list gets
+// 403 with no CORS headers — the response will be opaque to the caller's
+// browser, which is what we want for unauthorized origins.
+const ALLOWED_ORIGINS = new Set<string>([
+    'https://yuenimillion.live',
+    // Local dev — Vite default + the dev:debug variant we use.
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+]);
+
+const CORS_BASE = {
+    'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Max-Age': '86400',
+} as const;
+
+/**
+ * Pick the value for `Access-Control-Allow-Origin`. In debug mode (the
+ * `?debug` query param the frontend uses to bypass cache) we wildcard so
+ * ad-hoc tools work; otherwise we echo the request's origin only when it's
+ * on the allowlist.
+ */
+function resolveAllowOrigin(request: Request, isDebug: boolean): string | null {
+    const origin = request.headers.get('Origin');
+    if (isDebug) return '*';
+    if (origin && ALLOWED_ORIGINS.has(origin)) return origin;
+    return null;
+}
+
+/** Build a Response that always has CORS headers attached. */
+function withCors(
+    body: BodyInit | null,
+    init: ResponseInit,
+    allowOrigin: string | null,
+): Response {
+    const headers = new Headers(init.headers ?? {});
+    if (allowOrigin) {
+        headers.set('Access-Control-Allow-Origin', allowOrigin);
+        headers.set('Vary', 'Origin');
+    }
+    Object.entries(CORS_BASE).forEach(([k, v]) => headers.set(k, v));
+    return new Response(body, { ...init, headers });
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    const url = new URL(request.url);
-    let key = url.pathname.slice(1); // remove leading slash
-    // Remap /data/metadata/* and /data/prediction/* to metadata/* and prediction/* in the bucket
-    if (key.startsWith("data/metadata/")) {
-      key = key.replace("data/metadata/", "metadata/");
-    } else if (key.startsWith("data/prediction/")) {
-      key = key.replace("data/prediction/", "prediction/");
-    } else if (key.startsWith("data/normal/metadata/")) {
-      key = key.replace("data/normal/metadata/", "normal/metadata/");
-    } else if (key.startsWith("data/normal/prediction/")) {
-      key = key.replace("data/normal/prediction/", "normal/prediction/");
-    }
+    async fetch(request: Request, env: Env): Promise<Response> {
+        const url = new URL(request.url);
+        const isDebug = url.searchParams.has('no-cache') || url.searchParams.has('debug');
+        const allowOrigin = resolveAllowOrigin(request, isDebug);
 
-    if (
-      !key.startsWith("normal/metadata/") &&
-      !key.startsWith("normal/prediction/") &&
-      !key.startsWith("metadata/") &&
-      !key.startsWith("prediction/")
-    ) {
-      return new Response("Forbidden", { status: 403 });
-    }
+        // Reject disallowed origins outright. No CORS headers on this path
+        // is intentional — the caller's browser will refuse to read it.
+        if (!allowOrigin) {
+            return new Response('CORS Forbidden', { status: 403 });
+        }
 
-    const object = await env.BUCKET.get(key);
+        // Preflight.
+        if (request.method === 'OPTIONS') {
+            return withCors(null, { status: 204 }, allowOrigin);
+        }
 
-    if (!object) {
-      return new Response("Not Found", { status: 404 });
-    }
+        // Path → R2 key remap.
+        let key = url.pathname.slice(1); // remove leading slash
+        if (key.startsWith('data/metadata/')) {
+            key = key.replace('data/metadata/', 'metadata/');
+        } else if (key.startsWith('data/prediction/')) {
+            key = key.replace('data/prediction/', 'prediction/');
+        } else if (key.startsWith('data/normal/metadata/')) {
+            key = key.replace('data/normal/metadata/', 'normal/metadata/');
+        } else if (key.startsWith('data/normal/prediction/')) {
+            key = key.replace('data/normal/prediction/', 'normal/prediction/');
+        }
 
-    const origin = request.headers.get("Origin");
-    const isDebug =
-      url.searchParams.has("no-cache") || url.searchParams.has("debug");
+        if (
+            !key.startsWith('normal/metadata/') &&
+            !key.startsWith('normal/prediction/') &&
+            !key.startsWith('metadata/') &&
+            !key.startsWith('prediction/')
+        ) {
+            return withCors('Forbidden', { status: 403 }, allowOrigin);
+        }
 
-    const allowOrigin =
-      isDebug ? "*" : origin === "https://yuenimillion.live" ? origin : null;
+        const object = await env.BUCKET.get(key);
+        if (!object) {
+            return withCors('Not Found', { status: 404 }, allowOrigin);
+        }
 
-    if (!allowOrigin) {
-      return new Response("CORS Forbidden", { status: 403 });
-    }
+        const cacheControl = isDebug
+            ? 'no-cache'
+            : key.startsWith('normal/prediction/') || key.startsWith('prediction/')
+                ? 'public, max-age=3600'
+                : 'public, max-age=86400';
 
-    const cacheControl = isDebug
-      ? "no-cache"
-      : key.startsWith("normal/prediction/") || key.startsWith("prediction/")
-      ? "public, max-age=3600"
-      : "public, max-age=86400";
-
-    return new Response(object.body, {
-      headers: {
-        "Content-Type": object.httpMetadata?.contentType || "application/octet-stream",
-        "Access-Control-Allow-Origin": allowOrigin,
-        Vary: "Origin",
-        "Cache-Control": cacheControl,
-      },
-    });
-  },
+        return withCors(object.body, {
+            status: 200,
+            headers: {
+                'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream',
+                'Cache-Control': cacheControl,
+            },
+        }, allowOrigin);
+    },
 };
