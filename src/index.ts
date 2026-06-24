@@ -79,13 +79,16 @@ export default {
             key = key.replace('data/normal/metadata/', 'normal/metadata/');
         } else if (key.startsWith('data/normal/prediction/')) {
             key = key.replace('data/normal/prediction/', 'normal/prediction/');
+        } else if (key.startsWith('data/idol_icons/')) {
+            key = key.replace('data/idol_icons/', 'idol_icons/');
         }
 
         if (
             !key.startsWith('normal/metadata/') &&
             !key.startsWith('normal/prediction/') &&
             !key.startsWith('metadata/') &&
-            !key.startsWith('prediction/')
+            !key.startsWith('prediction/') &&
+            !key.startsWith('idol_icons/')
         ) {
             return withCors('Forbidden', { status: 403 }, allowOrigin);
         }
@@ -101,9 +104,11 @@ export default {
 
         const cacheControl = isDebug
             ? 'no-cache'
-            : key.startsWith('normal/prediction/') || key.startsWith('prediction/')
-                ? 'public, max-age=3600'
-                : 'public, max-age=86400';
+            : key.startsWith('idol_icons/')
+                ? 'public, max-age=31536000, immutable'
+                : key.startsWith('normal/prediction/') || key.startsWith('prediction/')
+                    ? 'public, max-age=3600'
+                    : 'public, max-age=86400';
 
         // R2 records the upload time on every object. Surface it as
         // `Last-Modified` so the frontend can do freshness checks via
