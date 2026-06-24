@@ -56,18 +56,6 @@ export default {
     async fetch(request: Request, env: Env): Promise<Response> {
         const url = new URL(request.url);
         const isDebug = url.searchParams.has('no-cache') || url.searchParams.has('debug');
-        const allowOrigin = resolveAllowOrigin(request, isDebug);
-
-        // Reject disallowed origins outright. No CORS headers on this path
-        // is intentional — the caller's browser will refuse to read it.
-        if (!allowOrigin) {
-            return new Response('CORS Forbidden', { status: 403 });
-        }
-
-        // Preflight.
-        if (request.method === 'OPTIONS') {
-            return withCors(null, { status: 204 }, allowOrigin);
-        }
 
         // Path → R2 key remap.
         let key = url.pathname.slice(1); // remove leading slash
@@ -81,6 +69,24 @@ export default {
             key = key.replace('data/normal/prediction/', 'normal/prediction/');
         } else if (key.startsWith('data/idol_icons/')) {
             key = key.replace('data/idol_icons/', 'idol_icons/');
+        }
+
+        // Idol icons are public static assets (loaded via <img>, which sends
+        // no Origin header). They bypass the origin allowlist and are served
+        // with a wildcard CORS origin. Everything else is the origin-gated
+        // data API.
+        const isIcon = key.startsWith('idol_icons/');
+        const allowOrigin = isIcon ? '*' : resolveAllowOrigin(request, isDebug);
+
+        // Reject disallowed origins for the data API. No CORS headers on this
+        // path is intentional — the caller's browser will refuse to read it.
+        if (!allowOrigin) {
+            return new Response('CORS Forbidden', { status: 403 });
+        }
+
+        // Preflight.
+        if (request.method === 'OPTIONS') {
+            return withCors(null, { status: 204 }, allowOrigin);
         }
 
         if (
